@@ -258,7 +258,9 @@ namespace ffmpegconvert
             foreach (string inputFile in fileMap.Keys)
             {
                 string outputFile;
+                string command = ""; // Declare and initialize command here
 
+                // Special handling for WAV
                 if (outputFormat == "wav")
                 {
                     outputFile = Path.Combine(
@@ -269,6 +271,34 @@ namespace ffmpegconvert
                     if (codec != "pcm_s16le" && codec != "pcm_s24le" && codec != "pcm_s32le")
                     {
                         codec = "pcm_s16le";
+                        Debug.WriteLine($"Invalid codec for WAV. Defaulting to: {codec}");
+                    }
+
+                    // Validate bit depth and sample format
+                    if (bitDepth != null)
+                    {
+                        string sampleFmt = bitDepth switch
+                        {
+                            "16-bit" => "s16",
+                            "24-bit" => "s24",
+                            "32-bit" => "s32",
+                            _ => "s16" // Default to 16-bit
+                        };
+
+                        if (codec == "pcm_s16le" && sampleFmt != "s16")
+                        {
+                            sampleFmt = "s16";
+                        }
+                        else if (codec == "pcm_s24le" && sampleFmt != "s24")
+                        {
+                            sampleFmt = "s24";
+                        }
+                        else if (codec == "pcm_s32le" && sampleFmt != "s32")
+                        {
+                            sampleFmt = "s32";
+                        }
+
+                        command += $" -sample_fmt {sampleFmt}";
                     }
                 }
                 else
@@ -280,42 +310,16 @@ namespace ffmpegconvert
                     );
                 }
 
-                // Construct the FFmpeg command
-                string command = $"-i \"{inputFile}\" -acodec {codec} -ar {sampleRate} -ac {channels}";
+                // Construct FFmpeg command
+                command = $"-i \"{inputFile}\" -acodec {codec} -ar {sampleRate} -ac {channels}";
 
-                // Add bit depth for WAV
-                if (outputFormat == "wav" && bitDepth != null)
-                {
-                    string sampleFmt = bitDepth switch
-                    {
-                        "16-bit" => "s16",
-                        "24-bit" => "s24",
-                        "32-bit" => "s32",
-                        _ => "s16" // Default to 16-bit
-                    };
-
-                    // Validate sample format with codec
-                    if (codec == "pcm_s16le" && sampleFmt != "s16")
-                    {
-                        sampleFmt = "s16";
-                    }
-                    else if (codec == "pcm_s24le" && sampleFmt != "s24")
-                    {
-                        sampleFmt = "s24";
-                    }
-                    else if (codec == "pcm_s32le" && sampleFmt != "s32")
-                    {
-                        sampleFmt = "s32";
-                    }
-
-                    command += $" -sample_fmt {sampleFmt}";
-                }
-
+                // Add bitrate for non-WAV formats
                 if (outputFormat != "wav" && codec != "pcm_s16le" && codec != "pcm_s24le" && codec != "pcm_s32le")
                 {
                     command += $" -b:a {bitrate}k";
                 }
 
+                // Add FLAC compression level
                 if (codec == "flac" && compressionLevel != null)
                 {
                     command += $" -compression_level {compressionLevel}";
@@ -325,6 +329,7 @@ namespace ffmpegconvert
 
                 Debug.WriteLine($"Final FFmpeg Command: {command}");
 
+                // Update the status label with the current file name
                 string currentFileName = Path.GetFileName(inputFile);
                 lblStatus.Invoke((MethodInvoker)(() => lblStatus.Text = $"Converting: {currentFileName}"));
 
@@ -344,6 +349,7 @@ namespace ffmpegconvert
             btnClearAll.Enabled = true;
             lblStatus.Text = "Status: Ready";
         }
+
 
         private async Task RunFFmpegCommandAsync(string command)
         {
